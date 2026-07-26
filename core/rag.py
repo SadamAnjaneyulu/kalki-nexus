@@ -126,9 +126,13 @@ class Retriever:
     async def retrieve(self, collection: str, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Return top_k relevant chunks for query from the collection."""
         safe_query = re.sub(r'[^\w\s]', ' ', query).strip()
-        if not safe_query:
+        words = [w for w in safe_query.split() if len(w) > 1]
+        if not words:
             return []
+
+        fts_query = " OR ".join(words)
         async with aiosqlite.connect(self.db_path) as db:
+            rows = []
             try:
                 async with db.execute(
                     """SELECT rc.text, rc.source, rc.chunk_index, rank
@@ -137,11 +141,25 @@ class Retriever:
                        WHERE rag_fts MATCH ? AND f.collection = ?
                        ORDER BY rank
                        LIMIT ?""",
-                    (safe_query, collection, top_k),
+                    (fts_query, collection, top_k),
                 ) as cur:
                     rows = await cur.fetchall()
-            except Exception:  # fts5 may error on very short queries
-                return []
+            except Exception:
+                rows = []
+
+            if not rows:
+                like_clauses = " OR ".join(["rc.text LIKE ?"] * len(words))
+                params = [f"%{w}%" for w in words] + [collection, top_k]
+                sql = f"""SELECT rc.text, rc.source, rc.chunk_index, 0.0
+                          FROM rag_chunks rc
+                          WHERE ({like_clauses}) AND rc.collection = ?
+                          LIMIT ?"""
+                try:
+                    async with db.execute(sql, params) as cur:
+                        rows = await cur.fetchall()
+                except Exception:
+                    rows = []
+
         return [
             {"text": r[0], "source": r[1], "chunk_index": r[2], "score": r[3]}
             for r in rows
