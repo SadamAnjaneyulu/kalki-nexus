@@ -16,7 +16,7 @@ class QuantAgent(BaseAgent):
     name = "quant_agent"
     description = "Designs and evaluates trading strategies, backtests, and risk metrics."
     channel_hints: ClassVar[List[str]] = ["quant"]
-    default_tool_categories: ClassVar[List[str]] = []
+    default_tool_categories: ClassVar[List[str]] = ["quant"]
     temperature = 0.1
 
     async def run(self, state: Dict[str, Any]) -> AgentResult:
