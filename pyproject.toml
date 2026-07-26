@@ -1,6 +1,6 @@
 [project]
 name = "kalki-nexus"
-version = "0.2.0"
+version = "1.0.0"
 description = "Kalki Nexus: a modular, LangGraph-orchestrated AI Operating System."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -42,12 +42,8 @@ requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# NOTE: "discord" and "mcp" are intentionally excluded from this list.
-# Packaging a local "discord" module alongside the installed "discord.py"
-# dependency (which also installs a top-level "discord" package), or a local
-# "mcp" module alongside the official "mcp" SDK (a transitive dependency of
-# langchain-mcp-adapters), would collide in site-packages if this project
-# were ever installed rather than run in place from source. Both packages
-# work fine run-in-place because the project root is on sys.path first; see
-# the README's "Known gotcha" section if you ever do package/install this.
 packages = ["core", "agents", "tools", "memory", "workflows"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
