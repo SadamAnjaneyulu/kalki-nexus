@@ -68,6 +68,9 @@ CHANNEL_PROFILE_MAP: Dict[str, str] = {
     "katappa-core": "system_architect",
     "katappa": "system_architect",
     "aadesham": "ai_architect",
+    "general": "ai_architect",
+    "chat": "ai_architect",
+    "lounge": "ai_architect",
 
     # ── MCP & Protocols → system_architect ──
     "mcp": "system_architect",
@@ -87,16 +90,19 @@ DELEGATE_PATTERN = re.compile(r'DELEGATE\[([a-zA-Z0-9_-]+)\]:\s*(.+)', re.DOTALL
 
 def _normalize_channel(raw: str) -> str:
     """Strip emojis, symbols, hashtags and lowercase a Discord channel name.
+    Normalizes underscores to hyphens so 'rajya_grantham' matches 'rajya-grantham'.
 
     Examples:
-        '📈-market-watch' → 'market-watch'
-        '#🐍-vajra-python' → 'vajra-python'
-        '👑 SIMHASANAM'   → 'simhasanam'
+        '📈-market-watch'   → 'market-watch'
+        '#🐍_vajra_python'  → 'vajra-python'
+        '👑 SIMHASANAM'     → 'simhasanam'
     """
     # Remove leading # if present
     raw = raw.lstrip("#").strip()
     # Remove leading non-word characters (emojis, symbols, dashes after emoji)
     cleaned = re.sub(r'^[^\w]+', '', raw).strip().lower()
+    # Convert underscores to hyphens for consistent key matching
+    cleaned = cleaned.replace("_", "-")
     return cleaned
 
 
