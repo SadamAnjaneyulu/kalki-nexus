@@ -60,14 +60,16 @@ async def aggregator_node(state: Dict[str, Any]) -> Dict[str, Any]:
         if name not in failed and result.answer and result.answer.strip()
     }
 
-    if failed and not successful:
-        first_error = next(iter(failed.values())).metadata["error"]
-        logger.warning("aggregator: every contributing agent failed (%s)", list(failed))
-        return {"final_answer": None, "error": first_error}
+    if not successful:
+        if failed:
+            first_error = next(iter(failed.values())).metadata["error"]
+            logger.warning("aggregator: every contributing agent failed (%s)", list(failed))
+            return {"final_answer": None, "error": first_error}
+        return {"final_answer": "No agent produced a non-empty result. Please try rephrasing your request.", "error": None}
 
     final_answer = await _synthesize(state.get("user_input", ""), successful)
     sources = sorted({source for result in successful.values() for source in result.sources})
-    overall_confidence = sum(result.confidence for result in successful.values()) / len(successful)
+    overall_confidence = sum(result.confidence for result in successful.values()) / len(successful) if successful else 0.0
 
     return {
         "final_answer": final_answer,
