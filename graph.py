@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
+
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -187,17 +187,19 @@ def build_graph() -> StateGraph:
 
 
 # Process-wide singleton — compiled once, reused for every request.
-# This prevents the 'threads can only be started once' error that occurs
-# when MemorySaver's threading.Lock is re-instantiated on each call.
+# No LangGraph checkpointer: we use our own SQLite memory layer instead.
+# MemorySaver caused 'threads can only be started once' crashes because
+# it stores AgentResult (a Pydantic model) via msgpack and the deserialization
+# triggered internal threading conflicts on every second Discord message.
 _APP: Optional[Any] = None
 
 
-def compiled_graph(checkpointer: Optional[Any] = None):
-    """Return the compiled Kalki Nexus graph, building it once per process."""
+def compiled_graph():
+    """Return the compiled Kalki Nexus graph, built once per process."""
     global _APP
     if _APP is None:
         graph = build_graph()
-        _APP = graph.compile(checkpointer=checkpointer or MemorySaver())
+        _APP = graph.compile(checkpointer=None)
     return _APP
 
 
@@ -226,5 +228,4 @@ async def invoke(
         "retry_count": 0,
         "metadata": {},
     }
-    run_config = {"configurable": {"thread_id": thread_id}}
-    return await app.ainvoke(initial_state, config=run_config)
+    return await app.ainvoke(initial_state)
