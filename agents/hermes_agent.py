@@ -152,9 +152,18 @@ class HermesAgent(BaseAgent):
         run_tool = RunHermesProfileTool()
         output = await run_tool.run(profile=selected_profile, prompt=enriched_prompt)
 
-        # Step 5: Handle empty or error responses
-        if not output or (output.startswith("Hermes profile") and "timed out" in output):
-            self.logger.warning("hermes_agent: profile '%s' returned no/error output, using fallback", selected_profile)
+        # Step 5: Handle empty, timeout, quota, or provider error responses
+        is_error = (
+            not output
+            or "timed out" in output.lower()
+            or "http 402" in output.lower()
+            or "http 403" in output.lower()
+            or "credits exhausted" in output.lower()
+            or "openrouter reported" in output.lower()
+            or "requires a subscription" in output.lower()
+        )
+        if is_error:
+            self.logger.warning("hermes_agent: profile '%s' returned provider/quota error ('%s'), falling back to default LLM", selected_profile, output[:100])
             return await self._default_llm_run(state)
 
         # Step 6: Handle Cross-Profile Delegation if emitted by the agent
