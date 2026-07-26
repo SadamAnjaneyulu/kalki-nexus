@@ -54,11 +54,19 @@ CHANNEL_HINTS: Dict[str, str] = {
     "amarendra-ai": "research_agent",
     "rag-vault": "research_agent",
     "prompt-engineering": "research_agent",
-    # Quantitative & Analytics
+    # Quantitative & Analytics (Quant Sanctum)
     "quant": "quant_agent",
+    "market-watch": "quant_agent",
+    "alpha-research": "quant_agent",
+    "backtesting": "quant_agent",
+    "analytics": "quant_agent",
+    "macro-news": "quant_agent",
     "model-training": "quant_agent",
     "evaluations": "quant_agent",
     "kurukshetra": "quant_agent",
+    # Akashic Library & AI Lab
+    "akashic-library": "research_agent",
+    "llm-lab": "research_agent",
     # Automation
     "automation": "automation_agent",
     "garuda-automation": "automation_agent",
