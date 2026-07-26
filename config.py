@@ -32,6 +32,7 @@ class ModelProvider(str, Enum):
     OPENROUTER = "openrouter"
     OLLAMA = "ollama"
     AZURE_OPENAI = "azure_openai"
+    NVIDIA = "nvidia"
 
 
 class MemoryBackendKind(str, Enum):
@@ -64,6 +65,12 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
     )
     azure_openai_api_key: str = Field(default_factory=lambda: os.getenv("AZURE_OPENAI_API_KEY", ""))
+    nvidia_api_key: str = Field(
+        default_factory=lambda: os.getenv("NVIDIA_API_KEY", os.getenv("NVIDIA_NIM_API_KEY", ""))
+    )
+    nvidia_base_url: str = Field(
+        default_factory=lambda: os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    )
 
     discord_token: str = Field(default_factory=lambda: os.getenv("DISCORD_TOKEN", ""))
     github_token: str = Field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
@@ -88,6 +95,7 @@ class Settings(BaseModel):
             ModelProvider.ANTHROPIC: ("ANTHROPIC_API_KEY", self.anthropic_api_key),
             ModelProvider.OPENROUTER: ("OPENROUTER_API_KEY", self.openrouter_api_key),
             ModelProvider.AZURE_OPENAI: ("AZURE_OPENAI_API_KEY", self.azure_openai_api_key),
+            ModelProvider.NVIDIA: ("NVIDIA_API_KEY", self.nvidia_api_key),
             ModelProvider.OLLAMA: ("", "ok"),  # Ollama is typically unauthenticated / local.
         }[self.provider]
         env_name, value = missing
@@ -146,6 +154,16 @@ class Settings(BaseModel):
                 azure_deployment=self.azure_openai_deployment,
                 api_version=self.azure_openai_api_version,
                 api_key=self.azure_openai_api_key,
+                temperature=temperature,
+            )
+
+        elif self.provider is ModelProvider.NVIDIA:
+            from langchain_openai import ChatOpenAI
+
+            llm = ChatOpenAI(
+                model=model_name,
+                api_key=self.nvidia_api_key,
+                base_url=self.nvidia_base_url,
                 temperature=temperature,
             )
         else:  # pragma: no cover - guarded by the ModelProvider enum
