@@ -165,6 +165,8 @@ class Settings(BaseModel):
                 api_key=self.nvidia_api_key,
                 base_url=self.nvidia_base_url,
                 temperature=temperature,
+                request_timeout=60.0,
+                max_retries=3,
             )
         else:  # pragma: no cover - guarded by the ModelProvider enum
             raise ValueError(f"Unsupported provider: {self.provider}")
