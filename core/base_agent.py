@@ -124,14 +124,12 @@ class BaseAgent(ABC):
             self.logger.error("agent %s failed: %s", self.name, exc.message)
             return {
                 "agent_results": {self.name: AgentResult(agent=self.name, answer="", confidence=0.0, metadata={"error": exc.to_dict()})},
-                "error": exc.to_dict(),
             }
         except Exception as exc:  # noqa: BLE001 - normalize unexpected errors
             wrapped = AgentError(self.name, str(exc))
             self.logger.exception("agent %s raised an unexpected error", self.name)
             return {
                 "agent_results": {self.name: AgentResult(agent=self.name, answer="", confidence=0.0, metadata={"error": wrapped.to_dict()})},
-                "error": wrapped.to_dict(),
             }
 
         return {
