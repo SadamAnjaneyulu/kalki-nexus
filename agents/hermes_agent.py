@@ -167,16 +167,29 @@ class HermesAgent(BaseAgent):
             self.logger.warning("hermes_agent: profile '%s' returned provider/quota error ('%s'), falling back to default LLM", selected_profile, output[:100])
             return await self._default_llm_run(state)
 
-        # Step 6: Handle Cross-Profile Delegation if emitted by the agent
+        # Step 6: Handle Cross-Profile Delegation (User-initiated & Agent-initiated)
+        delegated_profiles = []
+
+        # 6a: User-initiated cross-agent call (e.g. "ask software_engineer to...", "@quant_research")
+        user_lower = user_input.lower()
+        for p in self.PROFILE_ROLES:
+            if p != selected_profile and (f"@{p}" in user_lower or f"ask {p}" in user_lower or f"consult {p}" in user_lower or f"with {p}" in user_lower):
+                if p not in delegated_profiles:
+                    self.logger.info("hermes_agent: User explicitly requested cross-agent call to '%s'", p)
+                    sub_output = await run_tool.run(profile=p, prompt=user_input)
+                    if sub_output and not ("error" in sub_output.lower() and "402" in sub_output.lower()):
+                        output += f"\n\n🤝 **[Cross-Agent Handoff: @{p}]**\n{sub_output}"
+                        delegated_profiles.append(p)
+
+        # 6b: Agent-initiated cross-agent delegation (via DELEGATE[profile] tag)
         match = DELEGATE_PATTERN.search(output)
-        delegated_profile = None
         if match:
             target_profile = match.group(1).strip().lower()
             sub_prompt = match.group(2).strip()
 
-            if target_profile in self.PROFILE_ROLES and target_profile != selected_profile:
+            if target_profile in self.PROFILE_ROLES and target_profile != selected_profile and target_profile not in delegated_profiles:
                 self.logger.info("hermes_agent: Cross-delegating from '%s' to '%s'", selected_profile, target_profile)
-                delegated_profile = target_profile
+                delegated_profiles.append(target_profile)
                 sub_output = await run_tool.run(profile=target_profile, prompt=sub_prompt)
 
                 # Replace delegation tag with sub-agent response
@@ -192,7 +205,7 @@ class HermesAgent(BaseAgent):
             confidence=0.95,
             metadata={
                 "profile": selected_profile,
-                "delegated_profile": delegated_profile,
+                "delegated_profiles": delegated_profiles,
                 "channel": channel,
                 "container": "hermes-dashboard",
             },
