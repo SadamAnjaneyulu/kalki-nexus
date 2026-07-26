@@ -13,7 +13,8 @@ def test_discover_agents():
     assert "fallback_agent" in agents
     assert "python_agent" in agents
     assert "research_agent" in agents
-    assert "supervisor" in agents
+    assert "quant_agent" in agents
+    assert "supervisor" not in agents
 
 
 @pytest.mark.asyncio
