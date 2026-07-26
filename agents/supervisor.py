@@ -31,17 +31,41 @@ PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "supervisor.m
 
 logger = get_logger("kalki.agents.supervisor")
 
-# Discord channel name -> agent it should bias routing toward. "Bias", not
-# "force": see module docstring.
+import re
+
+# Discord channel name -> agent it should bias routing toward.
 CHANNEL_HINTS: Dict[str, str] = {
+    # Python & Development
     "vajra-python": "python_agent",
     "python": "python_agent",
+    "brahmastra-terminal": "python_agent",
+    "debug-zone": "python_agent",
+    "sandbox": "python_agent",
+    "bug-hunt": "python_agent",
+    "agnipariksha": "python_agent",
+    # Docker & Infrastructure
     "docker": "docker_agent",
+    # GitHub & Projects
     "github": "github_agent",
+    "projects": "github_agent",
+    # Research, RAG & AI
+    "rajya-grantham": "research_agent",
     "research": "research_agent",
+    "amarendra-ai": "research_agent",
+    "rag-vault": "research_agent",
+    "prompt-engineering": "research_agent",
+    # Quantitative & Analytics
     "quant": "quant_agent",
+    "model-training": "quant_agent",
+    "evaluations": "quant_agent",
+    "kurukshetra": "quant_agent",
+    # Automation
     "automation": "automation_agent",
+    "garuda-automation": "automation_agent",
+    # MCP & Protocols
     "mcp": "mcp_agent",
+    "mcp-mantra": "mcp_agent",
+    "api-gateway": "mcp_agent",
 }
 
 # Keyword hints used for the deterministic fallback router. This is
@@ -51,10 +75,10 @@ _KEYWORDS: Dict[str, List[str]] = {
     "python_agent": ["python", "script", "bug", "traceback", "refactor"],
     "docker_agent": ["docker", "container", "compose", "image", "dockerfile"],
     "github_agent": ["github", "pull request", "pr ", "repo", "commit", "issue"],
-    "research_agent": ["research", "paper", "summarize", "compare", "sources"],
-    "quant_agent": ["quant", "backtest", "strategy", "pnl", "sharpe", "risk"],
-    "automation_agent": ["automate", "schedule", "workflow", "cron"],
-    "mcp_agent": ["mcp", "connector", "tool call"],
+    "research_agent": ["research", "paper", "summarize", "compare", "sources", "document", "grantham"],
+    "quant_agent": ["quant", "backtest", "strategy", "pnl", "sharpe", "risk", "vwap"],
+    "automation_agent": ["automate", "schedule", "workflow", "cron", "n8n"],
+    "mcp_agent": ["mcp", "connector", "tool call", "protocol"],
 }
 
 
@@ -67,10 +91,12 @@ class RouteDecision(BaseModel):
 
 
 def normalize_channel(discord_channel: Optional[str]) -> Optional[str]:
-    """Strip a leading '#' and lowercase a Discord channel name for lookup in CHANNEL_HINTS."""
+    """Clean emojis, leading symbols, and lowercase a Discord channel name for lookup in CHANNEL_HINTS."""
     if not discord_channel:
         return None
-    return discord_channel.lstrip("#").strip().lower()
+    # Remove emojis, hashtags, and leading punctuation
+    cleaned = re.sub(r'^[^\w]+', '', discord_channel).strip().lower()
+    return cleaned
 
 
 def heuristic_routes(

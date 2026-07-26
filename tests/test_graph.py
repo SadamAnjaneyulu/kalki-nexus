@@ -43,3 +43,12 @@ def test_merge_agent_results():
     merged = merge_agent_results({"agent1": res1}, {"agent2": res2})
     assert "agent1" in merged
     assert "agent2" in merged
+
+
+def test_normalize_channel():
+    from agents.supervisor import normalize_channel, CHANNEL_HINTS
+    assert normalize_channel("📜-rajya-grantham") == "rajya-grantham"
+    assert CHANNEL_HINTS[normalize_channel("📜-rajya-grantham")] == "research_agent"
+    assert CHANNEL_HINTS[normalize_channel("🐍-vajra-python")] == "python_agent"
+    assert CHANNEL_HINTS[normalize_channel("🐳-docker")] == "docker_agent"
+    assert CHANNEL_HINTS[normalize_channel("🛰️-mcp-mantra")] == "mcp_agent"
