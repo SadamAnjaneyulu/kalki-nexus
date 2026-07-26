@@ -66,6 +66,7 @@ CHANNEL_PROFILE_MAP: Dict[str, str] = {
     # ── Architecture & Core → ai_architect ──
     "simhasanam": "ai_architect",
     "katappa-core": "system_architect",
+    "katappa": "system_architect",
     "aadesham": "ai_architect",
 
     # ── MCP & Protocols → system_architect ──
