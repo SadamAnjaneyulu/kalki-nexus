@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=azureuser
 WorkingDirectory=/home/azureuser/kalki-nexus
+ExecStartPre=/bin/mkdir -p /home/azureuser/kalki-nexus/logs
 ExecStart=/home/azureuser/kalki-nexus/.venv/bin/python app.py --discord --with-scheduler
 Restart=always
 RestartSec=5
