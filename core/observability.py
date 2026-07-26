@@ -104,3 +104,24 @@ def render_graph_mermaid(app: object, output_path: str = "graph.mmd") -> Optiona
         pass
 
     return output_path
+
+
+def extract_token_usage(response: Any) -> Dict[str, int]:
+    """Extract token usage metrics (input, output, total) from an LLM response."""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        meta = response.usage_metadata
+        return {
+            "input_tokens": meta.get("input_tokens", 0),
+            "output_tokens": meta.get("output_tokens", 0),
+            "total_tokens": meta.get("total_tokens", 0),
+        }
+    if hasattr(response, "response_metadata") and isinstance(response.response_metadata, dict):
+        usage = response.response_metadata.get("token_usage") or response.response_metadata.get("usage", {})
+        if isinstance(usage, dict) and usage:
+            return {
+                "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens", 0)),
+                "output_tokens": usage.get("completion_tokens", usage.get("output_tokens", 0)),
+                "total_tokens": usage.get("total_tokens", 0),
+            }
+    return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+

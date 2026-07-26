@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
 from core.exceptions import AgentError, KalkiError
-from core.observability import get_logger, timed
+from core.observability import extract_token_usage, get_logger, timed
 from core.permissions import DEFAULT_AGENT_PERMISSIONS, SecurityContext
 from core.resilience import RetryPolicy, with_retry
 from tools.registry import ToolLoader
@@ -100,11 +100,16 @@ class BaseAgent(ABC):
         tool_calls = [
             {"name": call.get("name"), "args": call.get("args")} for call in (response.tool_calls or [])
         ]
+        tokens = extract_token_usage(response)
         return AgentResult(
             agent=self.name,
             answer=str(response.content),
             tool_calls=tool_calls,
-            metadata={"model": self.settings.model, "provider": self.settings.provider.value},
+            metadata={
+                "model": self.settings.model,
+                "provider": self.settings.provider.value,
+                "token_usage": tokens,
+            },
         )
 
     # -- the LangGraph node -----------------------------------------------
@@ -124,16 +129,21 @@ class BaseAgent(ABC):
             self.logger.error("agent %s failed: %s", self.name, exc.message)
             return {
                 "agent_results": {self.name: AgentResult(agent=self.name, answer="", confidence=0.0, metadata={"error": exc.to_dict()})},
+                "metadata": {"failures": {self.name: exc.message}},
             }
         except Exception as exc:  # noqa: BLE001 - normalize unexpected errors
             wrapped = AgentError(self.name, str(exc))
             self.logger.exception("agent %s raised an unexpected error", self.name)
             return {
                 "agent_results": {self.name: AgentResult(agent=self.name, answer="", confidence=0.0, metadata={"error": wrapped.to_dict()})},
+                "metadata": {"failures": {self.name: str(exc)}},
             }
 
         return {
             "agent_results": {self.name: result},
             "messages": [AIMessage(content=result.answer, name=self.name)],
-            "metadata": {"timings": {self.name: result.metadata.get("duration_seconds", 0.0)}},
+            "metadata": {
+                "timings": {self.name: result.metadata.get("duration_seconds", 0.0)},
+                "tokens": {self.name: result.metadata.get("token_usage", {})},
+            },
         }
