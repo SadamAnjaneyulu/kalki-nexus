@@ -200,8 +200,9 @@ class HermesAgent(BaseAgent):
             or "requires a subscription" in output.lower()
         )
         if is_error:
-            self.logger.warning("hermes_agent: profile '%s' returned provider/quota error ('%s'), falling back to default LLM", selected_profile, output[:100])
-            return await self._default_llm_run(state)
+            self.logger.warning("hermes_agent: profile '%s' returned provider/quota error ('%s'), falling back to default LLM with enriched context", selected_profile, output[:100])
+            fallback_state = {**state, "user_input": enriched_prompt}
+            return await self._default_llm_run(fallback_state)
 
         # Step 7: Handle Agent-Driven Cross-Profile Delegation if emitted by the agent
         match = DELEGATE_PATTERN.search(output)
