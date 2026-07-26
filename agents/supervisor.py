@@ -1,23 +1,16 @@
 """
 Kalki Nexus - Supervisor
 
-An LLM-powered router with a Pydantic structured-output schema
-(`RouteDecision`). Inspects the user message, the Discord channel, attached
-files, requested tools, and prior state, then decides which specialist
-agent(s) should run.
+Routes ALL Discord channel messages to hermes_agent, which then delegates
+to the correct Hermes Agent profile based on the channel name. The channel-
+to-profile mapping lives in agents/hermes_agent.py (CHANNEL_PROFILE_MAP).
 
-The Discord channel contributes a *hint*, not a rule: CHANNEL_HINTS maps a
-channel name to the agent it should bias the Supervisor toward, and that
-hint is folded into the routing prompt rather than short-circuiting the LLM
-call - the Supervisor can and does override it (e.g. someone asking a
-research question in #docker still routes to the Research Agent).
-
-If the structured LLM call is unavailable (no API key, offline dev/tests),
-`heuristic_routes()` is used as a deterministic fallback so the graph always
-degrades gracefully instead of failing closed.
+Kalki Nexus's purpose is routing — Hermes does the actual thinking with
+its 69+ skills, tools, memory, and learned knowledge.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,67 +24,69 @@ PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "supervisor.m
 
 logger = get_logger("kalki.agents.supervisor")
 
-import re
 
-# Discord channel name -> agent it should bias routing toward.
+# ALL channels route to hermes_agent — Hermes profiles handle everything.
 CHANNEL_HINTS: Dict[str, str] = {
-    # Python & Development
-    "vajra-python": "python_agent",
-    "python": "python_agent",
-    "brahmastra-terminal": "python_agent",
-    "debug-zone": "python_agent",
-    "sandbox": "python_agent",
-    "bug-hunt": "python_agent",
-    "agnipariksha": "python_agent",
+    # Quant Sanctum
+    "market-watch": "hermes_agent",
+    "alpha-research": "hermes_agent",
+    "backtesting": "hermes_agent",
+    "analytics": "hermes_agent",
+    "macro-news": "hermes_agent",
+    "quant": "hermes_agent",
+    "kurukshetra": "hermes_agent",
+    # Engineering & Coding
+    "vajra-python": "hermes_agent",
+    "python": "hermes_agent",
+    "brahmastra-terminal": "hermes_agent",
+    "debug-zone": "hermes_agent",
+    "sandbox": "hermes_agent",
+    "bug-hunt": "hermes_agent",
+    "agnipariksha": "hermes_agent",
+    # Research & Akashic Library
+    "rajya-grantham": "hermes_agent",
+    "research": "hermes_agent",
+    "amarendra-ai": "hermes_agent",
+    "rag-vault": "hermes_agent",
+    "akashic-library": "hermes_agent",
+    "prompt-engineering": "hermes_agent",
+    # Machine Learning & AI Lab
+    "model-training": "hermes_agent",
+    "evaluations": "hermes_agent",
+    "llm-lab": "hermes_agent",
     # Docker & Infrastructure
-    "docker": "docker_agent",
+    "docker": "hermes_agent",
     # GitHub & Projects
-    "github": "github_agent",
-    "projects": "github_agent",
-    # Research, RAG & AI
-    "rajya-grantham": "research_agent",
-    "research": "research_agent",
-    "amarendra-ai": "research_agent",
-    "rag-vault": "research_agent",
-    "prompt-engineering": "research_agent",
-    # Quantitative & Analytics (Quant Sanctum)
-    "quant": "quant_agent",
-    "market-watch": "quant_agent",
-    "alpha-research": "quant_agent",
-    "backtesting": "quant_agent",
-    "analytics": "quant_agent",
-    "macro-news": "quant_agent",
-    "model-training": "quant_agent",
-    "evaluations": "quant_agent",
-    "kurukshetra": "quant_agent",
-    # Akashic Library & AI Lab
-    "akashic-library": "research_agent",
-    "llm-lab": "research_agent",
-    # Hermes & Core AI Operations
-    "hermes": "hermes_agent",
-    "katappa-core": "hermes_agent",
-    "simhasanam": "hermes_agent",
+    "github": "hermes_agent",
+    "projects": "hermes_agent",
     # Automation
-    "automation": "automation_agent",
-    "garuda-automation": "automation_agent",
+    "garuda-automation": "hermes_agent",
+    "automation": "hermes_agent",
+    # Architecture & Core
+    "simhasanam": "hermes_agent",
+    "katappa-core": "hermes_agent",
     # MCP & Protocols
-    "mcp": "mcp_agent",
-    "mcp-mantra": "mcp_agent",
-    "api-gateway": "mcp_agent",
+    "mcp": "hermes_agent",
+    "mcp-mantra": "hermes_agent",
+    "api-gateway": "hermes_agent",
+    # Hermes direct
+    "hermes": "hermes_agent",
+    # Catch-all misc
+    "aadesham": "hermes_agent",
 }
 
-# Keyword hints used for the deterministic fallback router. This is
-# intentionally kept in sync with, but independent of, the LLM path so the
-# graph still works with zero configured API keys.
+# Keyword hints for the deterministic fallback router
 _KEYWORDS: Dict[str, List[str]] = {
-    "hermes_agent": ["hermes", "profile", "hermes agent", "katappa"],
-    "python_agent": ["python", "script", "bug", "traceback", "refactor"],
-    "docker_agent": ["docker", "container", "compose", "image", "dockerfile"],
-    "github_agent": ["github", "pull request", "pr ", "repo", "commit", "issue"],
-    "research_agent": ["research", "paper", "summarize", "compare", "sources", "document", "grantham"],
-    "quant_agent": ["quant", "backtest", "strategy", "pnl", "sharpe", "risk", "vwap"],
-    "automation_agent": ["automate", "schedule", "workflow", "cron", "n8n"],
-    "mcp_agent": ["mcp", "connector", "tool call", "protocol"],
+    "hermes_agent": [
+        "hermes", "profile", "python", "script", "bug", "traceback", "refactor",
+        "docker", "container", "compose", "dockerfile",
+        "github", "pull request", "pr ", "repo", "commit", "issue",
+        "research", "paper", "summarize", "compare", "sources", "document",
+        "quant", "backtest", "strategy", "pnl", "sharpe", "risk", "vwap",
+        "automate", "schedule", "workflow", "cron", "n8n",
+        "mcp", "connector", "tool call", "protocol",
+        "katappa", "simhasanam", "grantham",
+    ],
 }
 
 
@@ -120,78 +115,39 @@ def heuristic_routes(
 ) -> List[str]:
     """Deterministic keyword-based routing, used when the LLM path is unavailable.
 
-    The channel hint is appended only if nothing else matched, matching the
-    "hint, not a rule" contract described in the module docstring.
+    Always routes to hermes_agent since Hermes handles everything.
     """
-    text = user_input.lower()
-    selected = [
-        agent for agent, keywords in _KEYWORDS.items() if any(keyword in text for keyword in keywords)
-    ]
-
-    for tool in requested_tools:
-        tool_lower = tool.lower()
-        for agent, keywords in _KEYWORDS.items():
-            if agent in selected:
-                continue
-            if any(keyword in tool_lower for keyword in keywords):
-                selected.append(agent)
-
-    if attached_files and "python_agent" not in selected:
-        selected.append("python_agent")
-
-    if not selected and channel_hint:
-        selected.append(channel_hint)
-
-    return selected or ["python_agent"]
+    # Always route to hermes_agent — Hermes profiles handle all domains
+    return ["hermes_agent"]
 
 
 class SupervisorAgent(BaseAgent):
-    """LangGraph node: populates state["route"] via an LLM structured-output call."""
+    """LangGraph node: always routes to hermes_agent.
+
+    Kalki Nexus's role is routing Discord messages to the correct Hermes
+    profile. The hermes_agent maps channel → profile and invokes
+    `hermes -p <profile> -z "<prompt>" --cli` inside the Docker container.
+    """
 
     name = "supervisor"
-    description = "Routes each request to one or more specialist agents."
+    description = "Routes each request to the Hermes Agent for execution via the appropriate profile."
     prompt_file = "supervisor.md"
 
     def load_prompt(self) -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
 
-    def _build_routing_prompt(self, state: Dict[str, Any], channel_hint: Optional[str], valid_agents: List[str]) -> str:
-        return (
-            f"{self.load_prompt()}\n\n"
-            f"Available agents: {', '.join(valid_agents)}\n"
-            f"Discord channel: {state.get('discord_channel') or 'n/a'}"
-            f"{f' (hint: prefer {channel_hint}, but only if the message actually fits)' if channel_hint else ''}\n"
-            f"Attached files: {state.get('attached_files') or 'none'}\n"
-            f"Requested tools: {state.get('requested_tools') or 'none'}\n"
-            f"Prior route (if any): {state.get('route') or 'none'}\n\n"
-            f"User message:\n{state.get('user_input', '')}"
+    async def decide(self, state: Dict[str, Any]) -> RouteDecision:
+        """Always route to hermes_agent — no LLM call needed for routing."""
+        channel = normalize_channel(state.get("discord_channel"))
+        channel_hint = CHANNEL_HINTS.get(channel, "hermes_agent")
+
+        return RouteDecision(
+            agents=[channel_hint],
+            reasoning=f"Routing to hermes_agent for channel '{channel or 'direct'}' — Hermes profile handles execution.",
+            confidence=0.95,
         )
 
-    async def decide(self, state: Dict[str, Any]) -> RouteDecision:
-        valid_agents = sorted(name for name in discover_agents() if name != "fallback_agent")
-        channel_hint = CHANNEL_HINTS.get(normalize_channel(state.get("discord_channel")))
-
-        try:
-            llm = self.settings.build_chat_model(temperature=0.0).with_structured_output(RouteDecision)
-            prompt = self._build_routing_prompt(state, channel_hint, valid_agents)
-            decision: RouteDecision = await llm.ainvoke(prompt)
-            decision.agents = [agent for agent in decision.agents if agent in valid_agents]
-            if not decision.agents:
-                decision.agents = heuristic_routes(
-                    state.get("user_input", ""), state.get("attached_files", []),
-                    state.get("requested_tools", []), channel_hint,
-                )
-            return decision
-        except Exception as exc:  # noqa: BLE001 - any LLM/config failure falls back to the heuristic router
-            logger.warning("LLM routing unavailable (%s); falling back to heuristic_routes().", exc)
-            routes = heuristic_routes(
-                state.get("user_input", ""), state.get("attached_files", []),
-                state.get("requested_tools", []), channel_hint,
-            )
-            return RouteDecision(agents=routes, reasoning="heuristic fallback (LLM routing unavailable)", confidence=0.4)
-
     async def run(self, state: Dict[str, Any]):
-        # SupervisorAgent does not produce an AgentResult; it overrides __call__ instead.
         raise NotImplementedError
 
     async def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
