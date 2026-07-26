@@ -80,6 +80,9 @@ CHANNEL_PROFILE_MAP: Dict[str, str] = {
 # Default profile when no channel mapping matches
 DEFAULT_PROFILE = "ai_architect"
 
+# Regex for parsing cross-profile delegation tags
+DELEGATE_PATTERN = re.compile(r'DELEGATE\[([a-zA-Z0-9_-]+)\]:\s*(.+)', re.DOTALL)
+
 
 def _normalize_channel(raw: str) -> str:
     """Strip emojis, symbols, hashtags and lowercase a Discord channel name.
@@ -98,7 +101,7 @@ def _normalize_channel(raw: str) -> str:
 
 class HermesAgent(BaseAgent):
     name = "hermes_agent"
-    description = "Routes Discord messages to the correct Hermes Agent profile and returns the response."
+    description = "Routes Discord messages to the correct Hermes Agent profile and enables cross-profile delegation."
     channel_hints: ClassVar[List[str]] = list(CHANNEL_PROFILE_MAP.keys())
     default_tool_categories: ClassVar[List[str]] = ["hermes", "terminal"]
     temperature = 0.2
@@ -123,7 +126,7 @@ class HermesAgent(BaseAgent):
         # Step 1: Normalize the Discord channel name
         channel = _normalize_channel(raw_channel)
 
-        # Step 2: Map channel → Hermes profile
+        # Step 2: Map channel → Primary Hermes profile
         selected_profile = CHANNEL_PROFILE_MAP.get(channel, DEFAULT_PROFILE)
         profile_role = self.PROFILE_ROLES.get(selected_profile, selected_profile)
 
@@ -132,18 +135,20 @@ class HermesAgent(BaseAgent):
             raw_channel, channel, selected_profile,
         )
 
-        # Step 3: Build a context-enriched prompt for Hermes
-        # This tells Hermes which Discord channel it's responding in and its role
+        # Step 3: Build a context-enriched prompt for Hermes with Delegation Instructions
+        available_profiles_str = ", ".join(sorted(set(CHANNEL_PROFILE_MAP.values())))
         enriched_prompt = (
-            f"[CONTEXT] You are responding in Discord channel '#{raw_channel}'. "
-            f"Your role: {profile_role}. "
-            f"You are part of the Kalki Nexus multi-agent system with profiles: "
-            f"{', '.join(CHANNEL_PROFILE_MAP.values())}. "
-            f"Respond naturally as this agent role.\n\n"
+            f"[CONTEXT] You are responding in Discord channel '#{raw_channel}'.\n"
+            f"Your role: {profile_role}.\n"
+            f"Available Hermes Agent profiles: {available_profiles_str}.\n"
+            f"CROSS-AGENT DELEGATION INSTRUCTIONS:\n"
+            f"If the user request requires specialized help from another profile (e.g. software_engineer for coding, quant_research for market stats, research_analyst for deep search), you can delegate sub-tasks by including this line on a new line:\n"
+            f"DELEGATE[<profile_name>]: <sub_task_instructions>\n"
+            f"The system will execute that profile and present its output.\n\n"
             f"[USER MESSAGE] {user_input}"
         )
 
-        # Step 4: Execute the prompt through the Hermes CLI
+        # Step 4: Execute the primary prompt through the Hermes CLI
         run_tool = RunHermesProfileTool()
         output = await run_tool.run(profile=selected_profile, prompt=enriched_prompt)
 
@@ -152,12 +157,32 @@ class HermesAgent(BaseAgent):
             self.logger.warning("hermes_agent: profile '%s' returned no/error output, using fallback", selected_profile)
             return await self._default_llm_run(state)
 
+        # Step 6: Handle Cross-Profile Delegation if emitted by the agent
+        match = DELEGATE_PATTERN.search(output)
+        delegated_profile = None
+        if match:
+            target_profile = match.group(1).strip().lower()
+            sub_prompt = match.group(2).strip()
+
+            if target_profile in self.PROFILE_ROLES and target_profile != selected_profile:
+                self.logger.info("hermes_agent: Cross-delegating from '%s' to '%s'", selected_profile, target_profile)
+                delegated_profile = target_profile
+                sub_output = await run_tool.run(profile=target_profile, prompt=sub_prompt)
+
+                # Replace delegation tag with sub-agent response
+                replacement = (
+                    f"\n\n🤝 **[Cross-Agent Handoff: @{target_profile}]**\n"
+                    f"{sub_output}\n"
+                )
+                output = DELEGATE_PATTERN.sub(replacement, output)
+
         return AgentResult(
             agent=self.name,
             answer=output,
             confidence=0.95,
             metadata={
                 "profile": selected_profile,
+                "delegated_profile": delegated_profile,
                 "channel": channel,
                 "container": "hermes-dashboard",
             },
