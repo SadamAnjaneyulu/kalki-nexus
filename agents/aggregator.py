@@ -55,7 +55,10 @@ async def aggregator_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return {"final_answer": "No agent produced a result.", "error": None}
 
     failed = {name: result for name, result in results.items() if result.metadata.get("error")}
-    successful = {name: result for name, result in results.items() if name not in failed}
+    successful = {
+        name: result for name, result in results.items()
+        if name not in failed and result.answer and result.answer.strip()
+    }
 
     if failed and not successful:
         first_error = next(iter(failed.values())).metadata["error"]
