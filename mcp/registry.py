@@ -19,22 +19,10 @@ from typing import Any, Dict, List, Optional
 
 from core.exceptions import MCPError
 from core.observability import get_logger
+from mcp.models import MCPServerConfig
 from mcp.client import discover_server_tools, load_server_tools
 
 logger = get_logger("kalki.mcp.registry")
-
-
-@dataclass
-class MCPServerConfig:
-    """Configuration for a single MCP server."""
-
-    name: str
-    transport: str  # "stdio" | "sse" | "streamable_http"
-    command: Optional[str] = None
-    args: List[str] = field(default_factory=list)
-    url: Optional[str] = None
-    env: Dict[str, str] = field(default_factory=dict)
-    enabled: bool = True
 
 
 @dataclass

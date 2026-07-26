@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from mcp.registry import MCPServerConfig  # noqa: F401 - re-exported for type hints in real implementations
+from mcp.models import MCPServerConfig  # noqa: F401 - re-exported for type hints in real implementations
 
 
 async def discover_server_tools(config: "MCPServerConfig") -> List[Dict[str, Any]]:
