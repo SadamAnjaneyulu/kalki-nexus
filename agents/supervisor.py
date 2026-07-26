@@ -67,6 +67,10 @@ CHANNEL_HINTS: Dict[str, str] = {
     # Akashic Library & AI Lab
     "akashic-library": "research_agent",
     "llm-lab": "research_agent",
+    # Hermes & Core AI Operations
+    "hermes": "hermes_agent",
+    "katappa-core": "hermes_agent",
+    "simhasanam": "hermes_agent",
     # Automation
     "automation": "automation_agent",
     "garuda-automation": "automation_agent",
@@ -80,6 +84,7 @@ CHANNEL_HINTS: Dict[str, str] = {
 # intentionally kept in sync with, but independent of, the LLM path so the
 # graph still works with zero configured API keys.
 _KEYWORDS: Dict[str, List[str]] = {
+    "hermes_agent": ["hermes", "profile", "hermes agent", "katappa"],
     "python_agent": ["python", "script", "bug", "traceback", "refactor"],
     "docker_agent": ["docker", "container", "compose", "image", "dockerfile"],
     "github_agent": ["github", "pull request", "pr ", "repo", "commit", "issue"],
