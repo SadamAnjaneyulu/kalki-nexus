@@ -57,7 +57,7 @@ def main() -> None:
         logger.info("LangSmith tracing enabled (project=%s)", settings.langsmith_project)
 
     if "--discord" in sys.argv:
-        from discord.bot import run as run_discord_bot  # local import: only needed for this path
+        from discord_bot.bot import run as run_discord_bot  # local import: only needed for this path
         run_discord_bot()
     elif "--render-graph" in sys.argv:
         render_graph()

@@ -1,0 +1,3 @@
+"""
+Hermes Discord Integration Package
+"""

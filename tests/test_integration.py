@@ -7,7 +7,7 @@ Integration tests for Kalki Nexus end-to-end workflows:
 import pytest
 from core.rag import Indexer, Retriever
 from core.delegation import delegate_to
-from discord.bot import _chunk_message
+from discord_bot.bot import _chunk_message
 
 
 @pytest.mark.asyncio

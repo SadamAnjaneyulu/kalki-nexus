@@ -29,7 +29,6 @@ def _chunk_message(text: str, limit: int = 1990) -> List[str]:
         if len(text) <= limit:
             chunks.append(text)
             break
-        # Split on newline if possible
         split_idx = text.rfind("\n", 0, limit)
         if split_idx == -1:
             split_idx = limit
@@ -49,7 +48,6 @@ class HermesBot(discord.Client):
         bind_client(self)
 
     async def on_message(self, message: discord.Message):
-        # Ignore bot's own messages
         if message.author == self.user or message.author.bot:
             return
 
@@ -70,7 +68,7 @@ class HermesBot(discord.Client):
                     thread_id=f"discord_{message.channel.id}",
                 )
                 answer = result.get("final_answer") or "Sorry, no response was generated."
-                
+
                 for chunk in _chunk_message(answer):
                     await message.channel.send(chunk)
 
