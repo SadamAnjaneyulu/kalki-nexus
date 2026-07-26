@@ -1,0 +1,17 @@
+[Unit]
+Description=Kalki Nexus Multi-Agent AI System & Background Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/home/azureuser/kalki-nexus
+ExecStart=/home/azureuser/kalki-nexus/.venv/bin/python app.py --with-scheduler
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/home/azureuser/kalki-nexus/logs/kalki.log
+StandardError=append:/home/azureuser/kalki-nexus/logs/kalki_error.log
+
+[Install]
+WantedBy=multi-user.target
