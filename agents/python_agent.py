@@ -14,7 +14,7 @@ class PythonAgent(BaseAgent):
     name = "python_agent"
     description = "Writes, debugs, and refactors Python code."
     channel_hints: ClassVar[List[str]] = ["python", "vajra-python"]
-    default_tool_categories: ClassVar[List[str]] = ["filesystem"]
+    default_tool_categories: ClassVar[List[str]] = ["filesystem", "terminal"]
     temperature = 0.2
 
     async def run(self, state: Dict[str, Any]) -> AgentResult:
