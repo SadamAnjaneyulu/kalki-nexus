@@ -44,12 +44,31 @@ async def run_with_scheduler() -> None:
     )
 
 
+async def run_discord_with_scheduler() -> None:
+    """Run Discord bot + background job scheduler concurrently."""
+    import core.jobs  # noqa: F401 - registers all built-in cron jobs on import
+    from config import get_settings
+    from core.scheduler import scheduler
+    from discord_bot.bot import HermesBot
+
+    settings = get_settings()
+    if not settings.discord_token:
+        logger.error("DISCORD_TOKEN is not configured in .env!")
+        return
+
+    bot = HermesBot()
+    await asyncio.gather(
+        bot.start(settings.discord_token),
+        scheduler.start(),
+    )
+
+
 def main() -> None:
     """CLI entrypoint.
 
     --discord           launch the Discord bot instead of the example run
     --render-graph      write graph.mmd/graph.png and exit
-    --with-scheduler    run background jobs alongside the example invocation
+    --with-scheduler    run background jobs alongside the main service
     """
     settings = get_settings()
     configure_logging(settings)
@@ -57,8 +76,11 @@ def main() -> None:
         logger.info("LangSmith tracing enabled (project=%s)", settings.langsmith_project)
 
     if "--discord" in sys.argv:
-        from discord_bot.bot import run as run_discord_bot  # local import: only needed for this path
-        run_discord_bot()
+        if "--with-scheduler" in sys.argv:
+            asyncio.run(run_discord_with_scheduler())
+        else:
+            from discord_bot.bot import run as run_discord_bot  # local import
+            run_discord_bot()
     elif "--render-graph" in sys.argv:
         render_graph()
     elif "--with-scheduler" in sys.argv:
