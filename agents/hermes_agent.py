@@ -207,8 +207,25 @@ class HermesAgent(BaseAgent):
         )
         if is_error:
             self.logger.warning("hermes_agent: profile '%s' returned provider/quota error ('%s'), falling back to default LLM with enriched context", selected_profile, output[:100])
-            fallback_state = {**state, "user_input": enriched_prompt}
-            return await self._default_llm_run(fallback_state)
+            
+            # Direct LLM call without tools to guarantee a text response (prevents empty content from tool calls)
+            llm = self.settings.build_chat_model(temperature=self.temperature)
+            messages = [
+                SystemMessage(content=self.load_prompt()),
+                HumanMessage(content=enriched_prompt),
+            ]
+            response = await llm.ainvoke(messages)
+            
+            return AgentResult(
+                agent=self.name,
+                answer=str(response.content),
+                confidence=0.8,
+                metadata={
+                    "profile": selected_profile,
+                    "channel": channel,
+                    "fallback": True,
+                },
+            )
 
         # Step 7: Handle Agent-Driven Cross-Profile Delegation if emitted by the agent
         match = DELEGATE_PATTERN.search(output)
