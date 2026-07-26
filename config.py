@@ -105,51 +105,37 @@ class Settings(BaseModel):
                 "Copy .env.example to .env and fill it in."
             )
 
-    def build_chat_model(
+    def _build_single_llm(
         self,
+        provider: ModelProvider,
+        model_name: str,
         temperature: float = 0.2,
-        tools: Optional[List[Any]] = None,
-        model_override: Optional[str] = None,
     ):
-        """Return a LangChain chat model for whichever provider is configured.
-
-        This is the single seam agents use to get an LLM. Adding a provider
-        means adding one branch here, not touching every agent module.
-        """
-        self.require_key_for_provider()
-        model_name = model_override or self.model
-        llm: Any
-
-        if self.provider is ModelProvider.OPENAI:
+        """Internal helper to build a single LLM instance for a given provider."""
+        if provider is ModelProvider.OPENAI:
             from langchain_openai import ChatOpenAI
+            return ChatOpenAI(model=model_name, api_key=self.openai_api_key, temperature=temperature)
 
-            llm = ChatOpenAI(model=model_name, api_key=self.openai_api_key, temperature=temperature)
-
-        elif self.provider is ModelProvider.ANTHROPIC:
+        elif provider is ModelProvider.ANTHROPIC:
             from langchain_anthropic import ChatAnthropic
+            return ChatAnthropic(model=model_name, api_key=self.anthropic_api_key, temperature=temperature)
 
-            llm = ChatAnthropic(model=model_name, api_key=self.anthropic_api_key, temperature=temperature)
-
-        elif self.provider is ModelProvider.OPENROUTER:
-            # OpenRouter speaks the OpenAI wire protocol; only the base_url and key differ.
+        elif provider is ModelProvider.OPENROUTER:
             from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(
+            return ChatOpenAI(
                 model=model_name,
                 api_key=self.openrouter_api_key,
                 base_url="https://openrouter.ai/api/v1",
                 temperature=temperature,
             )
 
-        elif self.provider is ModelProvider.OLLAMA:
+        elif provider is ModelProvider.OLLAMA:
             from langchain_community.chat_models import ChatOllama
+            return ChatOllama(model=model_name, base_url=self.ollama_base_url, temperature=temperature)
 
-            llm = ChatOllama(model=model_name, base_url=self.ollama_base_url, temperature=temperature)
-
-        elif self.provider is ModelProvider.AZURE_OPENAI:
+        elif provider is ModelProvider.AZURE_OPENAI:
             from langchain_openai import AzureChatOpenAI
-
-            llm = AzureChatOpenAI(
+            return AzureChatOpenAI(
                 azure_endpoint=self.azure_openai_endpoint,
                 azure_deployment=self.azure_openai_deployment,
                 api_version=self.azure_openai_api_version,
@@ -157,10 +143,9 @@ class Settings(BaseModel):
                 temperature=temperature,
             )
 
-        elif self.provider is ModelProvider.NVIDIA:
+        elif provider is ModelProvider.NVIDIA:
             from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(
+            return ChatOpenAI(
                 model=model_name,
                 api_key=self.nvidia_api_key,
                 base_url=self.nvidia_base_url,
@@ -168,9 +153,48 @@ class Settings(BaseModel):
                 request_timeout=60.0,
                 max_retries=3,
             )
-        else:  # pragma: no cover - guarded by the ModelProvider enum
-            raise ValueError(f"Unsupported provider: {self.provider}")
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
+    def build_chat_model(
+        self,
+        temperature: float = 0.2,
+        tools: Optional[List[Any]] = None,
+        model_override: Optional[str] = None,
+        enable_fallbacks: bool = True,
+    ):
+        """Return a LangChain chat model with automatic multi-provider failover.
+
+        If the primary provider hits rate limits (429) or service outages (503),
+        requests automatically failover to secondary available providers
+        (NVIDIA NIM -> OpenRouter -> Ollama).
+        """
+        self.require_key_for_provider()
+        model_name = model_override or self.model
+        primary_llm = self._build_single_llm(self.provider, model_name, temperature)
+
+        fallbacks = []
+        if enable_fallbacks:
+            # Build secondary fallbacks if keys are available
+            if self.provider != ModelProvider.NVIDIA and self.nvidia_api_key:
+                try:
+                    fallbacks.append(self._build_single_llm(ModelProvider.NVIDIA, "meta/llama-3.3-70b-instruct", temperature))
+                except Exception:
+                    pass
+
+            if self.provider != ModelProvider.OPENROUTER and self.openrouter_api_key:
+                try:
+                    fallbacks.append(self._build_single_llm(ModelProvider.OPENROUTER, "poolside/laguna-m.1:free", temperature))
+                except Exception:
+                    pass
+
+            if self.provider != ModelProvider.OLLAMA:
+                try:
+                    fallbacks.append(self._build_single_llm(ModelProvider.OLLAMA, "minimax-m3", temperature))
+                except Exception:
+                    pass
+
+        llm = primary_llm.with_fallbacks(fallbacks) if fallbacks else primary_llm
         return llm.bind_tools(tools) if tools else llm
 
 
