@@ -186,16 +186,19 @@ def build_graph() -> StateGraph:
     return graph
 
 
-def compiled_graph(checkpointer: Optional[Any] = None):
-    """Return a compiled, ready-to-invoke Kalki Nexus graph.
+# Process-wide singleton — compiled once, reused for every request.
+# This prevents the 'threads can only be started once' error that occurs
+# when MemorySaver's threading.Lock is re-instantiated on each call.
+_APP: Optional[Any] = None
 
-    A checkpointer is required for the human-approval interrupt() to work
-    across resumed runs; defaults to an in-memory saver so the scaffold runs
-    out of the box. Swap in a persistent checkpointer (Postgres/SQLite/Redis)
-    for a real deployment.
-    """
-    graph = build_graph()
-    return graph.compile(checkpointer=checkpointer or MemorySaver())
+
+def compiled_graph(checkpointer: Optional[Any] = None):
+    """Return the compiled Kalki Nexus graph, building it once per process."""
+    global _APP
+    if _APP is None:
+        graph = build_graph()
+        _APP = graph.compile(checkpointer=checkpointer or MemorySaver())
+    return _APP
 
 
 async def invoke(
@@ -205,7 +208,7 @@ async def invoke(
     requested_tools: Optional[List[str]] = None,
     thread_id: str = "default",
 ) -> KalkiState:
-    """Example entrypoint: run a single request through the graph end to end."""
+    """Run a single request through the graph, reusing the compiled singleton."""
     app = compiled_graph()
     initial_state: KalkiState = {
         "messages": [],
