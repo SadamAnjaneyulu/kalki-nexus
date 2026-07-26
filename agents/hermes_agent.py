@@ -103,6 +103,19 @@ class HermesAgent(BaseAgent):
     default_tool_categories: ClassVar[List[str]] = ["hermes", "terminal"]
     temperature = 0.2
 
+    # Human-readable profile descriptions for context
+    PROFILE_ROLES: ClassVar[Dict[str, str]] = {
+        "ai_architect": "Kalki Nexus AI Architect — central command, planning, task execution",
+        "quant_research": "Quantitative Research Analyst — market analysis, trading strategies, financial data",
+        "software_engineer": "Software Engineer — Python coding, debugging, code generation, GitHub",
+        "research_analyst": "Research Analyst — documentation, papers, knowledge synthesis",
+        "ml_engineer": "ML Engineer — model training, evaluations, LLM experiments",
+        "system_architect": "System Architect — infrastructure, Docker, MCP, DevOps",
+        "automation": "Automation Specialist — workflows, cron jobs, n8n, scheduling",
+        "technical_writer": "Technical Writer — prompt engineering, documentation, content",
+        "learning_mentor": "Learning Mentor — teaching, explanations, tutorials",
+    }
+
     async def run(self, state: Dict[str, Any]) -> AgentResult:
         user_input = state.get("user_input", "")
         raw_channel = state.get("discord_channel") or ""
@@ -112,18 +125,30 @@ class HermesAgent(BaseAgent):
 
         # Step 2: Map channel → Hermes profile
         selected_profile = CHANNEL_PROFILE_MAP.get(channel, DEFAULT_PROFILE)
+        profile_role = self.PROFILE_ROLES.get(selected_profile, selected_profile)
 
         self.logger.info(
             "hermes_agent: channel='%s' → normalized='%s' → profile='%s'",
             raw_channel, channel, selected_profile,
         )
 
-        # Step 3: Execute the prompt through the Hermes CLI
-        run_tool = RunHermesProfileTool()
-        output = await run_tool.run(profile=selected_profile, prompt=user_input)
+        # Step 3: Build a context-enriched prompt for Hermes
+        # This tells Hermes which Discord channel it's responding in and its role
+        enriched_prompt = (
+            f"[CONTEXT] You are responding in Discord channel '#{raw_channel}'. "
+            f"Your role: {profile_role}. "
+            f"You are part of the Kalki Nexus multi-agent system with profiles: "
+            f"{', '.join(CHANNEL_PROFILE_MAP.values())}. "
+            f"Respond naturally as this agent role.\n\n"
+            f"[USER MESSAGE] {user_input}"
+        )
 
-        # Step 4: Handle empty or error responses
-        if not output or output.startswith("Hermes profile") and "timed out" in output:
+        # Step 4: Execute the prompt through the Hermes CLI
+        run_tool = RunHermesProfileTool()
+        output = await run_tool.run(profile=selected_profile, prompt=enriched_prompt)
+
+        # Step 5: Handle empty or error responses
+        if not output or (output.startswith("Hermes profile") and "timed out" in output):
             self.logger.warning("hermes_agent: profile '%s' returned no/error output, using fallback", selected_profile)
             return await self._default_llm_run(state)
 
